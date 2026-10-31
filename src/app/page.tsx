@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Terminal, Code2, User, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import ArchitectureExplorer from "@/components/ArchitectureExplorer";
+import TraditionalPortfolio from "@/components/TraditionalPortfolio";
 import TextareaAutosize from "react-textarea-autosize";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { atomDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -17,6 +18,8 @@ export default function Home() {
   const { messages, isLoading, sendMessage, append: chatAppend } = chat;
   const [input, setInput] = useState("");
   const [activeView, setActiveView] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"ai" | "traditional">("ai");
+  const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const handleInputChange = (e: any) => setInput(e.target.value);
@@ -24,12 +27,14 @@ export default function Home() {
     e.preventDefault();
     if (!input.trim()) return;
     const msg = { role: "user", content: input };
+    setIsGenerating(true);
     if (sendMessage) sendMessage(msg);
     else if (chatAppend) chatAppend(msg);
     setInput("");
   };
 
   const append = (msg: { role: string, content: string }) => {
+    setIsGenerating(true);
     if (sendMessage) sendMessage(msg);
     else if (chatAppend) chatAppend(msg);
   };
@@ -37,6 +42,12 @@ export default function Home() {
   useEffect(() => {
     if (!messages || messages.length === 0) return;
     const lastMsg: any = messages[messages.length - 1];
+    
+    // Check if assistant has started responding
+    if (lastMsg.role === 'assistant') {
+      setIsGenerating(false);
+    }
+    
     const toolParts = lastMsg.toolInvocations || lastMsg.parts?.filter((p: any) => p.type?.startsWith('tool-') || p.type === 'dynamic-tool' || p.type === 'tool-invocation') || [];
     if (toolParts.length > 0) {
       const lastTool = toolParts[toolParts.length - 1];
@@ -54,8 +65,7 @@ export default function Home() {
     "Explain your backend experience",
     "Show my best project",
     "Explain your architecture",
-    "Show my resume",
-    "Explain FleetLink"
+    "Show my resume"
   ];
 
   const scrollToBottom = () => {
@@ -64,19 +74,66 @@ export default function Home() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isLoading, isGenerating]);
 
   return (
-    <main className="flex h-[100dvh] flex-col items-center justify-between p-4 md:p-12 relative overflow-hidden">
-      {/* Background Glow */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary/10 rounded-full blur-[120px] pointer-events-none" />
+    <>
+      {/* View Toggle Switch */}
+      <div className="fixed top-4 right-4 md:top-6 md:right-8 z-[100] flex items-center bg-card/80 border border-border/50 rounded-full p-1 backdrop-blur-md shadow-lg">
+        <button
+          onClick={() => setViewMode("ai")}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
+            viewMode === "ai" 
+              ? "bg-primary text-primary-foreground shadow-md" 
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Sparkles size={16} />
+          <span className="hidden sm:inline">AI Chat</span>
+        </button>
+        <button
+          onClick={() => setViewMode("traditional")}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
+            viewMode === "traditional" 
+              ? "bg-[#74DF00] text-black shadow-md shadow-[#74DF00]/20" 
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <User size={16} />
+          <span className="hidden sm:inline">Portfolio</span>
+        </button>
+      </div>
 
-      {/* Main Chat Interface */}
-      <div className="w-full max-w-4xl flex flex-col h-full z-10">
+      <AnimatePresence mode="wait">
+        {viewMode === "traditional" ? (
+          <motion.div
+            key="traditional"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.5 }}
+            className="w-full h-full"
+          >
+            <TraditionalPortfolio />
+          </motion.div>
+        ) : (
+          <motion.main 
+            key="ai"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.5 }}
+            className="flex h-[100dvh] flex-col items-center justify-between p-4 md:p-12 relative overflow-hidden"
+          >
+            {/* Background Glow */}
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-secondary/10 rounded-full blur-[120px] pointer-events-none" />
+
+            {/* Main Chat Interface */}
+            <div className="w-full max-w-4xl flex flex-col h-full z-10">
         
         {/* Header / Empty State */}
-        {(!messages || messages.length === 0) && (
+        {(!messages || messages.length === 0) && !isLoading && !isGenerating && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -94,7 +151,7 @@ export default function Home() {
         )}
 
         {/* Chat Messages */}
-        {messages && messages.length > 0 && (
+        {(messages && messages.length > 0 || isLoading || isGenerating) && (
           <div className="flex-1 overflow-y-auto min-h-0 w-full space-y-6 pb-6 scrollbar-hide px-4" data-lenis-prevent>
             <AnimatePresence>
               {messages && messages.map((m: any) => (
@@ -208,7 +265,7 @@ export default function Home() {
                 </motion.div>
               ))}
             </AnimatePresence>
-            {isLoading && (!messages || messages.length === 0 || messages[messages.length - 1]?.role === 'user' || (messages[messages.length - 1]?.role === 'assistant' && !messages[messages.length - 1]?.content && (!messages[messages.length - 1]?.parts || messages[messages.length - 1]?.parts?.length === 0))) && (
+            {(isLoading || isGenerating) && (!messages || messages.length === 0 || messages[messages.length - 1]?.role === 'user' || (messages[messages.length - 1]?.role === 'assistant' && !messages[messages.length - 1]?.content && (!messages[messages.length - 1]?.parts || messages[messages.length - 1]?.parts?.length === 0))) && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -259,8 +316,8 @@ export default function Home() {
               <TextareaAutosize
                 className="flex-1 bg-transparent border-none outline-none p-3 text-lg placeholder:text-muted-foreground/50 focus:ring-0 resize-none max-h-[200px] scrollbar-hide disabled:opacity-50 disabled:cursor-not-allowed"
                 value={input || ""}
-                placeholder={isLoading ? "Generating response..." : "Ask Shubham AI anything..."}
-                disabled={isLoading}
+                placeholder={isLoading || isGenerating ? "Generating response..." : "Ask Shubham AI anything..."}
+                disabled={isLoading || isGenerating}
                 onChange={handleInputChange}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -272,10 +329,10 @@ export default function Home() {
               />
               <button
                 type="submit"
-                disabled={isLoading || !(input || "").trim()}
+                disabled={isLoading || isGenerating || !(input || "").trim()}
                 className="p-3 bg-primary text-primary-foreground rounded-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-2 font-medium"
               >
-                {isLoading ? <div className="w-[18px] h-[18px] border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <Send size={18} />}
+                {isLoading || isGenerating ? <div className="w-[18px] h-[18px] border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <Send size={18} />}
               </button>
             </div>
           </form>
@@ -364,33 +421,10 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Floating Info Cards (Desktop) */}
-      <div className="hidden lg:block absolute left-8 top-1/4 space-y-6">
-        <FloatingCard delay={0.1} title="Current Role" value={portfolioData.personalInfo.role} icon={<Code2 size={16}/>} />
-        <FloatingCard delay={0.3} title="Experience" value="2+ Years" />
-      </div>
-      
-      <div className="hidden lg:block absolute right-8 top-1/3 space-y-6">
-        <FloatingCard delay={0.2} title="Tech Stack" value="Node.js, React, AWS" />
-        <FloatingCard delay={0.4} title="Status" value={portfolioData.personalInfo.availability} />
-      </div>
-    </main>
+    </motion.main>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
-function FloatingCard({ title, value, icon, delay = 0 }: { title: string, value: string, icon?: React.ReactNode, delay?: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: title.includes("Role") || title.includes("Exp") ? -50 : 50 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay, duration: 0.8, ease: "easeOut" }}
-      className="bg-card/50 border border-border/30 p-4 rounded-xl backdrop-blur-md shadow-xl w-64 transform hover:-translate-y-2 transition-transform duration-300"
-    >
-      <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1 flex items-center gap-2">
-        {icon}
-        {title}
-      </div>
-      <div className="text-sm font-medium">{value}</div>
-    </motion.div>
-  );
-}
